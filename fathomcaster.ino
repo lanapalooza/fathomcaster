@@ -1,36 +1,30 @@
 /*
-  WiFi Web Server LED Blink
-
-  A simple web server that lets you blink an LED via the web.
-  This sketch will print the IP address of your WiFi module (once connected)
-  to the Serial monitor. From there, you can open that address in a web browser
-  to turn on and off the LED on pin 9.
-
-  If the IP address of your board is yourAddress:
-  http://yourAddress/H turns the LED on
-  http://yourAddress/L turns it off
-
-  This example is written for a network using WPA encryption. For
-  WEP or WPA, change the Wifi.begin() call accordingly.
-
-  Circuit:
-   Board with NINA module (Arduino MKR WiFi 1010, MKR VIDOR 4000 and UNO WiFi Rev.2)
-   LED attached to pin 9
-
-  created 25 Nov 2012
-  by Tom Igoe
+  WiFi Web Server LED Blink created 25 Nov 2012 by Tom Igoe
+  LED VU meter for Arduino and Adafruit NeoPixel LEDs. Written by Adafruit Industries.  Distributed under the BSD license. This paragraph must be included in any redistribution.
 */
 
-#define LED_PIN    6 // Pin the NeoPixel's are on
-#define LED_COUNT 25 // Number of NeoPixel's configured
+#define N_PIXELS  25  // Number of pixels in strand
 #define MIC_PIN   A0  // Microphone is attached to this analog pin
-#define SAMPLE_WINDOW   5  // Sample window for average level (in MS) for microphone
-byte peak = 20;      // For microphone/LED code Peak level of column; used for falling dots
-unsigned int sample; // For microphone/LED code
-byte dotCount = 0;  // For microphone/LED code - Frame counter for peak dot
-byte dotHangCount = 0; // For microphone/LED code - Frame counter for holding peak dot
+#define LED_PIN    6  // NeoPixel LED strand is connected to this pin
+#define DC_OFFSET  0  // DC offset in mic signal - if unusure, leave 0
+#define NOISE     20  // Noise/hum/interference in mic signal
+#define SAMPLES   40  // Length of buffer for dynamic level adjustment
+#define TOP       (N_PIXELS + 2) // Allow dot to go slightly off scale
+#define PEAK_FALL 90  // Rate of peak falling dot
 
 
+// More microphone code I don't understand
+byte
+  peak      = 0,      // Used for falling dot
+  dotCount  = 0,      // Frame counter for delaying dot-falling speed
+  volCount  = 0;      // Frame counter for storing past volume data
+int
+  vol[SAMPLES],       // Collection of prior volume samples
+  lvl       = 20,      // Current "dampened" audio level
+  minLvlAvg = 0,      // For dynamic adjustment of graph low & high
+  maxLvlAvg = 512;
+
+// Some random numbers for the random effect
 long randNumber1;
 long randNumber2;
 long randNumber3;
@@ -38,32 +32,39 @@ long randDelay1;
 long randDelay2;
 long randDelay3;
 
+// All the stuff that makes this stuff work
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include "arduino_secrets.h"
 #include <Adafruit_NeoPixel.h>
 
 // Declare our NeoPixel strip object:
-Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-// I've got 25 LED's in my project, but they are not in a logical order for what I'm looking to accomplish so I am putting them into an array for ordering
-int blue[] = {3, 9, 10, 11, 18, 24, 20, 19};
-int green[] = {4, 8, 12, 17, 16, 15, 14, 13};
+
+// A couple of arrays to order the lights in a logical more appealing look
+int blue[] = {3, 9, 10, 11, 18, 24, 20, 19}; //The Blue "Candy Cane" 
+int green[] = {4, 8, 12, 17, 16, 15, 14, 13}; //The Green "Candy Cane"
+int leftbonus[] = {2, 1, 0}; // 3X, 4X, 5X lights on the left side
+int rightbonus [] = {5, 6, 7}; // 3X, 4X, 5X lights on the right side
+int whenlit [] = {21, 22, 23}; //Bigger When Lit lights at the top, two yellow, one red
 
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;                 // your network key Index number (needed only for WEP)
 
+//More WiFi stuff I don't understand
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 
 void setup() {
   Serial.begin(9600);      // initialize serial communication
   pinMode(9, OUTPUT);      // set the LED pin mode
-
-  strip.begin();
-  strip.setBrightness(255);
+  memset(vol, 0, sizeof(vol)); // this is used by the microphone code I don't understand
+  
+  strip.begin(); //NEO Pixel intializing stuff
+  strip.setBrightness(255); //NEO Pixel intializing stuff
   strip.show(); // Initialize all pixels to 'off';
 
   // check for the WiFi module:
@@ -161,69 +162,86 @@ void current_code_J(void)
 
 void current_code_L(void)
 {
-  unsigned long startMillis = millis(); // Start of sample window
-  float peakToPeak = 0;   // peak-to-peak level
-  unsigned int signalMax = 0;
-  unsigned int signalMin = 1023;
 
-  // collect data for length of sample window (in mS)
-  while (millis() - startMillis < SAMPLE_WINDOW)
-  {
-    sample = analogRead(MIC_PIN);
-    if (sample < 1024)  // toss out spurious readings
-    {
-      if (sample > signalMax)
-      {
-        signalMax = sample;  // save just the max levels
-      }
-      else if (sample < signalMin)
-      {
-        signalMin = sample;  // save just the min levels
-      }
+ 
+  uint8_t  i;
+  uint16_t minLvl, maxLvl;
+  int      n, height;
+
+
+
+  n   = analogRead(MIC_PIN);                  // Raw reading from mic
+  n   = abs(n - 512 - DC_OFFSET); // Center on zero
+  n   = (n <= NOISE) ? 0 : (n - NOISE);             // Remove noise/hum
+  lvl = ((lvl * 7) + n) >> 3;    // "Dampened" reading (else looks twitchy)
+
+  // Calculate bar height based on dynamic min/max levels (fixed point):
+  height = TOP * (lvl - minLvlAvg) / (long)(maxLvlAvg - minLvlAvg);
+
+  if(height < 0L)       height = 0;      // Clip output
+  else if(height > TOP) height = TOP;
+  if(height > peak)     peak   = height; // Keep 'peak' dot at top
+
+
+  // Color pixels based on rainbow gradient
+  for(i=0; i<N_PIXELS; i++) {
+    if(i >= height)               strip.setPixelColor(i,   0,   0, 0);
+    else strip.setPixelColor(i,Wheel(map(i,0,strip.numPixels()-1,30,150)));
+
+  }
+
+
+
+  // Draw peak dot 
+  if(peak > 0 && peak <= N_PIXELS-1) strip.setPixelColor(peak,Wheel(map(peak,0,strip.numPixels()-1,30,150)));
+
+   strip.show(); // Update strip
+
+// Every few frames, make the peak pixel drop by 1:
+
+    if(++dotCount >= PEAK_FALL) { //fall rate
+
+      if(peak > 0) peak--;
+      dotCount = 0;
     }
-  }
 
-  peakToPeak = signalMax - signalMin;  // max - min = peak-peak amplitude
-  int lights = (peakToPeak / 1024) * 125;
-  int previousLights;
-  previousLights = lights;
-  if (lights >= 8)
-  {
-    lights = 8;
-  }
-  else
-  {
-    lights = lights;
-  }
 
-  //  Serial.print ("peakToPeak: ");
-  //  Serial.println(peakToPeak);
-  Serial.print ("lights: ");
-  Serial.println(lights);
-  //  Serial.print ("previousLights: ");
-  // Serial.println(previousLights);
 
-  for (int i = 0; i <= lights; i++) {
-    strip.setPixelColor(green[i], 200, 200, 200);
-    strip.setPixelColor(blue[i], 200, 200, 200);
-    /* Serial.print("UP i: ");
-      Serial.println(i);
-      Serial.print("UP j: ");
-      Serial.printl n(j); */
-    strip.show();
-    delay(50);
+  vol[volCount] = n;                      // Save sample for dynamic leveling
+  if(++volCount >= SAMPLES) volCount = 0; // Advance/rollover sample counter
+
+  // Get volume range of prior frames
+  minLvl = maxLvl = vol[0];
+  for(i=1; i<SAMPLES; i++) {
+    if(vol[i] < minLvl)      minLvl = vol[i];
+    else if(vol[i] > maxLvl) maxLvl = vol[i];
   }
-  for (int i = lights; i >= 0; i--) {
-    strip.setPixelColor(green[i], 0, 0, 0);
-    strip.setPixelColor(blue[i], 0, 0, 0);
-    /*Serial.print("DOWN i: ");
-      Serial.println(i);
-      Serial.print("DOWN j: ");
-      Serial.println(j); */
-    strip.show();
-    delay(50);
-  }
+  // minLvl and maxLvl indicate the volume range over prior frames, used
+  // for vertically scaling the output graph (so it looks interesting
+  // regardless of volume level).  If they're too close together though
+  // (e.g. at very low volume levels) the graph becomes super coarse
+  // and 'jumpy'...so keep some minimum distance between them (this
+  // also lets the graph go to zero when no sound is playing):
+  if((maxLvl - minLvl) < TOP) maxLvl = minLvl + TOP;
+  minLvlAvg = (minLvlAvg * 63 + minLvl) >> 6; // Dampen min/max levels
+  maxLvlAvg = (maxLvlAvg * 63 + maxLvl) >> 6; // (fake rolling average)
+
 }
+
+// Input a value 0 to 255 to get a color value.
+// The colors are a transition r - g - b - back to r.
+uint32_t Wheel(byte WheelPos) {
+  if(WheelPos < 85) {
+   return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+  } else if(WheelPos < 170) {
+   WheelPos -= 85;
+   return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  } else {
+   WheelPos -= 170;
+   return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  }
+ 
+ }
 
 void loop() { 
   
