@@ -96,8 +96,9 @@ void setup() {
   current_code_H();
 }
 
-char current_code = 0;
+char current_code = 0; //Variable to keep track of which effect I want to show
 
+//Simple "Candy Cane" effect, where the LED's walk the green and blue strings
 void current_code_H(void)
 {
   for (int i = 0; i <= 7; i++) {
@@ -115,6 +116,7 @@ void current_code_H(void)
   }
 }
 
+//Simple effect where the LED's natrually progress through in order as I laid them out on the guitar, it ended up looking pretty cool, I'm calling it "snake" as that is what i reminds me of when it moves through the LED's
 void current_code_I(void)
 {
   for (int i = 0; i <= 24; i++) {
@@ -130,6 +132,7 @@ void current_code_I(void)
   }
 }
 
+//This effect feels more like a pinball attract mode, not any real logicall grouping of lights, just randomly lighting 3 up for random amounts of time.
 void current_code_J(void)
 {
     randNumber1 = random(0, 24);
@@ -147,7 +150,6 @@ void current_code_J(void)
     strip.setPixelColor(randNumber3, 200, 200, 200);
     strip.show();
     delay(randDelay3);
-
     strip.setPixelColor(randNumber1, 0, 0, 0);
     strip.show();
     delay(randDelay1);
@@ -160,15 +162,12 @@ void current_code_J(void)
     
 }
 
+// The real reason to light this thing up in the first place, read the microphone, I went through a couple of different ones by the MAX4466 is the one I've landed on, the microphone is epoxied into the flipper hole. I basically have no idea how or why this works, the comments are not mine, thank Adafruit for this one.
 void current_code_L(void)
 {
-
- 
   uint8_t  i;
   uint16_t minLvl, maxLvl;
   int      n, height;
-
-
 
   n   = analogRead(MIC_PIN);                  // Raw reading from mic
   n   = abs(n - 512 - DC_OFFSET); // Center on zero
@@ -190,8 +189,6 @@ void current_code_L(void)
 
   }
 
-
-
   // Draw peak dot 
   if(peak > 0 && peak <= N_PIXELS-1) strip.setPixelColor(peak,Wheel(map(peak,0,strip.numPixels()-1,30,150)));
 
@@ -204,8 +201,6 @@ void current_code_L(void)
       if(peak > 0) peak--;
       dotCount = 0;
     }
-
-
 
   vol[volCount] = n;                      // Save sample for dynamic leveling
   if(++volCount >= SAMPLES) volCount = 0; // Advance/rollover sample counter
@@ -239,8 +234,7 @@ uint32_t Wheel(byte WheelPos) {
   } else {
    WheelPos -= 170;
    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-  }
- 
+  } 
  }
 
 void loop() { 
@@ -282,9 +276,7 @@ void loop() {
           currentLine += c;      // add it to the end of the currentLine
         }
 
-        // Check to see if the client request was "GET /H" or "GET /L":
-
-
+        // Check to see what the client request was eg. "GET /H" or "GET /L" etc:
 
         if (currentLine.endsWith("GET /H")) {
 
