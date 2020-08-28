@@ -6,6 +6,7 @@
 #define N_PIXELS  25  // Number of pixels in strand
 #define MIC_PIN   A0  // Microphone is attached to this analog pin
 #define LED_PIN    6  // NeoPixel LED strand is connected to this pin
+#define BTN_PIN    8  // BTN pin
 #define DC_OFFSET  0  // DC offset in mic signal - if unusure, leave 0
 #define NOISE     20  // Noise/hum/interference in mic signal
 #define SAMPLES   40  // Length of buffer for dynamic level adjustment
@@ -60,7 +61,7 @@ WiFiServer server(80);
 
 void setup() {
   Serial.begin(9600);      // initialize serial communication
-  pinMode(9, OUTPUT);      // set the LED pin mode
+  pinMode(LED_BUILTIN, OUTPUT);     // set the board LED pin mode  
   memset(vol, 0, sizeof(vol)); // this is used by the microphone code I don't understand
   
   strip.begin(); //NEO Pixel intializing stuff
@@ -94,9 +95,33 @@ void setup() {
 
   // first block 
   current_code_H();
+
+  //
+  pinMode(BTN_PIN, INPUT_PULLUP); // set the BTN pin mode
+  // use hardware timer, loop() is so busy by strip and WIFI
+  startTimer(10); // 10 Hz = 100 ms tick  
 }
 
+#define MODE_MIN 1
+#define MODE_MAX 4
 char current_code = 0; //Variable to keep track of which effect I want to show
+
+void check_button(void)
+{
+  static char last_state = 1;  // not pressed (input = VCC pullup)
+  char current_state = digitalRead(BTN_PIN);
+
+  // was pressed (input = GND)
+  if (current_state == 0 && last_state == 1)
+  {
+    current_code ++;
+    if (current_code > MODE_MAX)
+      current_code = MODE_MIN;    
+  }
+  // memorize previous state
+  last_state = current_state;
+}
+
 
 //Simple "Candy Cane" effect, where the LED's walk the green and blue strings
 void current_code_H(void)
@@ -346,4 +371,63 @@ void printWifiStatus() {
   // print where to go in a browser:
   Serial.print("To see this page in action, open a browser to http://");
   Serial.println(ip);
+}
+
+
+#define CPU_HZ 48000000
+#define TIMER_PRESCALER_DIV 1024
+
+void setTimerFrequency(int frequencyHz) 
+{
+  int compareValue = (CPU_HZ / (TIMER_PRESCALER_DIV * frequencyHz)) - 1;
+  TcCount16* TC = (TcCount16*) TC3;
+  // Make sure the count is in a proportional position to where it was
+  // to prevent any jitter or disconnect when changing the compare value.
+  TC->COUNT.reg = map(TC->COUNT.reg, 0, TC->CC[0].reg, 0, compareValue);
+  TC->CC[0].reg = compareValue;
+  while (TC->STATUS.bit.SYNCBUSY == 1);
+}
+
+void startTimer(int frequencyHz) 
+{
+  REG_GCLK_CLKCTRL = (uint16_t) (GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_ID (GCM_TCC2_TC3)) ;
+  while ( GCLK->STATUS.bit.SYNCBUSY == 1 );
+
+  TcCount16* TC = (TcCount16*) TC3;
+
+  TC->CTRLA.reg &= ~TC_CTRLA_ENABLE;
+
+  // Use the 16-bit timer
+  TC->CTRLA.reg |= TC_CTRLA_MODE_COUNT16;
+  while (TC->STATUS.bit.SYNCBUSY == 1);
+
+  // Use match mode so that the timer counter resets when the count matches the compare register
+  TC->CTRLA.reg |= TC_CTRLA_WAVEGEN_MFRQ;
+  while (TC->STATUS.bit.SYNCBUSY == 1);
+
+  // Set prescaler to 1024
+  TC->CTRLA.reg |= TC_CTRLA_PRESCALER_DIV1024;
+  while (TC->STATUS.bit.SYNCBUSY == 1);
+
+  setTimerFrequency(frequencyHz);
+
+  // Enable the compare interrupt
+  TC->INTENSET.reg = 0;
+  TC->INTENSET.bit.MC0 = 1;
+
+  NVIC_EnableIRQ(TC3_IRQn);
+
+  TC->CTRLA.reg |= TC_CTRLA_ENABLE;
+  while (TC->STATUS.bit.SYNCBUSY == 1);
+}
+
+void TC3_Handler() {
+  TcCount16* TC = (TcCount16*) TC3;
+  // If this interrupt is due to the compare register matching the timer count
+  // we chec button
+  if (TC->INTFLAG.bit.MC0 == 1) {
+    TC->INTFLAG.bit.MC0 = 1;
+    
+    check_button();
+  }
 }
