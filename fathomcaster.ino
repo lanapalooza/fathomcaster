@@ -16,14 +16,14 @@
 
 // More microphone code I don't understand
 byte
-peak      = 0,      // Used for falling dot
-dotCount  = 0,      // Frame counter for delaying dot-falling speed
-volCount  = 0;      // Frame counter for storing past volume data
+  peak      = 0,      // Used for falling dot
+  dotCount  = 0,      // Frame counter for delaying dot-falling speed
+  volCount  = 0;      // Frame counter for storing past volume data
 int
-vol[SAMPLES],       // Collection of prior volume samples
-    lvl       = 20,      // Current "dampened" audio level
-    minLvlAvg = 0,      // For dynamic adjustment of graph low & high
-    maxLvlAvg = 512;
+  vol[SAMPLES],       // Collection of prior volume samples
+  lvl       = 20,      // Current "dampened" audio level
+  minLvlAvg = 0,      // For dynamic adjustment of graph low & high
+  maxLvlAvg = 512;
 
 // Some random numbers for the random effect
 long randNumber1;
@@ -32,7 +32,7 @@ long randNumber3;
 long randDelay1;
 long randDelay2;
 long randDelay3;
-
+  
 // All the stuff that makes this stuff work
 #include <SPI.h>
 #include <WiFiNINA.h>
@@ -42,8 +42,9 @@ long randDelay3;
 // Declare our NeoPixel strip object:
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
+
 // A couple of arrays to order the lights in a logical more appealing look
-int blue[] = {5, 11, 12, 13, 20, 26, 22, 21}; //The Blue "Candy Cane"
+int blue[] = {5, 11, 12, 13, 20, 26, 22, 21}; //The Blue "Candy Cane" 
 int green[] = {6, 10, 14, 19, 18, 17, 16, 15}; //The Green "Candy Cane"
 int leftbonus[] = {4, 3, 2}; // 3X, 4X, 5X lights on the left side
 int rightbonus [] = {7, 8, 9}; // 3X, 4X, 5X lights on the right side
@@ -66,7 +67,7 @@ char wifi_enabled = 1;                  // default wifi is enabled
 #define TUNE_LED_YELLOW_LOW  24
 #define TUNE_LED_RED         25
 // LEDS to lit number of string
-int string_led_number[6] = {7, 8, 9, 4, 3, 2};
+int string_led_number[6] = {7, 8, 9, 4, 3, 2}; 
 
 #define E1 329.63
 #define B2 246.94
@@ -96,21 +97,21 @@ static void   ADCsync() {
 
 
 uint32_t adcSetupFast1(void)
-{
+{  
   ADC->INPUTCTRL.bit.GAIN = ADC_INPUTCTRL_GAIN_DIV2_Val;      // Gain select as 1X
   ADC->REFCTRL.bit.REFSEL = ADC_REFCTRL_REFSEL_INTVCC1_Val;   //  1.6 V Supply VDDANA
-
+  
   // Set sample length and averaging
   ADCsync();
   ADC->AVGCTRL.reg = 0x00 ;       //Single conversion no averaging
   ADCsync();
   ADC->SAMPCTRL.reg = 0x0A;  ; //sample length in 1/2 CLK_ADC cycles Default is 3F
-
+  
   //Control B register
-  int16_t ctrlb = 0x420;       // Control register B hibyte = prescale, lobyte is resolution and mode
+  int16_t ctrlb = 0x420;       // Control register B hibyte = prescale, lobyte is resolution and mode 
   ADCsync();
-  ADC->CTRLB.reg =  ctrlb     ;
-  adcReadFast1();  //Discard first conversion after setup as ref changed
+  ADC->CTRLB.reg =  ctrlb     ; 
+  adcReadFast1();  //Discard first conversion after setup as ref changed  
 }
 
 uint32_t adcReadFast1() {
@@ -131,19 +132,19 @@ uint32_t adcReadFast1() {
   uint32_t valueRead = ADC->RESULT.reg;
 
   ADCsync();
-  ADC->CTRLA.bit.ENABLE = 0x00;             // Disable the ADC
+  ADC->CTRLA.bit.ENABLE = 0x00;             // Disable the ADC 
   ADCsync();
   ADC->SWTRIG.reg = 0x01;                    //  and flush for good measure
   return valueRead;
 }
-
+ 
 void all_leds_off(void)
 {
-  for (int i = 2; i < N_PIXELS; i++)
+  for (int i=2; i < N_PIXELS; i++)
   {
-    strip.setPixelColor(i, 0, 0, 0);
+    strip.setPixelColor(i, 0, 0, 0);        
   }
-    strip.show();
+  strip.show();
 }
 
 #define MODE_MIN 1
@@ -161,62 +162,61 @@ void check_button(void)
   {
     current_code ++;
     if (current_code > MODE_MAX)
-      current_code = MODE_MIN;
+      current_code = MODE_MIN;    
   }
   // memorize previous state
   last_state = current_state;
 }
 
-// TUNER PART
+// TUNER PART 
 
 void setup_tuner(void)
 {
-  // for pitch detector
-  timer_doPrepare(4, sampleFrequency_integer);
+  // for pitch detector  
+  timer_doPrepare(4, sampleFrequency_integer); 
 }
 
-void findFrequency(int current_string)
-{
-  // lit string number
-  for (int i = 0; i < 6; i++)
+void findFrequency(int current_string) 
+{  
+  // ideal                 329.631, 246.94, 196.00, 146.83, 110.00, 82.41}; 
+  float red_threshold[6] = {8.0,    7.0,    6.0,    5.0,    4.0,    3.0};  
+  float yel_threshold[6] = {20.0,   18.0,   16.0,   14.0,   12.0,   10.0};  
+    
+  float freq_min1 = freq[current_string] - yel_threshold[current_string];
+  float freq_max1 = freq[current_string] + yel_threshold[current_string];
+
+  float freq_min2 = freq[current_string] - red_threshold[current_string];
+  float freq_max2 = freq[current_string] + red_threshold[current_string];
+
+  // light the string number
+  for (int i = 0; i < 6; i++) 
   {
-    if (i == current_string)
+    if (i == current_string) 
       strip.setPixelColor(string_led_number[i], 200, 200, 200);
-    else
-      strip.setPixelColor(string_led_number[i], 0, 0, 0);
+    else  
+      strip.setPixelColor(string_led_number[i], 0, 0, 0);   
   }
-  strip.show();
-
-  // 10% erro maybe
-  float freq_min1 = freq[current_string] - (freq[current_string] / 10);
-  float freq_max1 = freq[current_string] + (freq[current_string] / 10);
-
-  // 5% error good result
-  float freq_min2 = freq[current_string] - (freq[current_string] / 20);
-  float freq_max2 = freq[current_string] + (freq[current_string] / 20);
-
-  sampleCnt = 0;
-
+  strip.show();  
+  
+  sampleCnt = 0; 
   timer_doStart(4);
   while (sampleCnt < bufferSize); // wait for data
-  timer_doStop(4);
+  timer_doStop(4);  
+   
+  // char str[80];
+  //for (int k = 0; k < bufferSize; k += 8) {    
+  //  sprintf(str, "%d %d %d %d", rawData[k], rawData[k+2], rawData[k+4], rawData[k+6]);    
+  //  Serial.println(str); 
+  //}  
 
   // Calculate mean to remove DC offset
   long meanSum = 0 ;
 
-  // char str[80];
-  //for (int k = 0; k < bufferSize; k += 8) {
-  //  sprintf(str, "%d %d %d %d", rawData[k], rawData[k+2], rawData[k+4], rawData[k+6]);
-  //  Serial.println(str);
-  //}
-
-  for (int k = 0; k < bufferSize; k++) {
+  for (int k = 0; k < bufferSize; k++) {    
     meanSum += rawData[k] ;
   }
   int mean = meanSum / bufferSize ;
 
-  //Serial.println("mean = ");
-  //Serial.println(mean);
   // Remove mean
   for (int k = 0; k < bufferSize; k++) {
     rawData[k] -= mean ;
@@ -224,16 +224,16 @@ void findFrequency(int current_string)
 
   // Amplitude
   /*
-    long skv = 0;
-    for (int k = 0; k < bufferSize; k++)
-    {
+  long skv = 0;
+  for (int k = 0; k < bufferSize; k++)
+  {
       skv += (int)rawData[k] * (int)rawData[k];
-    }
-    skv = sqrt(skv / bufferSize);
-
-    sprintf(str, "TEST1 amplitude =  %d", skv);
-    Serial.println(str);
-    return;
+  }
+  skv = sqrt(skv / bufferSize);
+  
+  sprintf(str, "TEST1 amplitude =  %d", skv);    
+  Serial.println(str); 
+  return;
   */
 
   // Autocorrelation
@@ -271,43 +271,43 @@ void findFrequency(int current_string)
     }
 
     // Frequency identified in Hz
-    if (threshold > 100 && period > 0)
-    {
-      frequency = sampleFrequency_float / period;
-
-      if (frequency < 500)
+    if (threshold > 100 && period > 0) 
+    {      
+      frequency = sampleFrequency_float / period;    
+      
+      if (frequency < 400)   
       {
-        Serial.println(frequency);
-
+        //Serial.println(frequency);             
+         
         if (frequency >= freq_min1 && frequency <= freq_max1)
         {
-          if (frequency >= freq_min2 && frequency <= freq_max2)
+          if (frequency >= freq_min2 && frequency <= freq_max2) 
           {
             strip.setPixelColor(TUNE_LED_RED, 200, 200, 200);
             strip.setPixelColor(TUNE_LED_YELLOW_HIGH, 0, 0, 0);
             strip.setPixelColor(TUNE_LED_YELLOW_LOW, 0, 0, 0);
           }
-          else if (frequency >= freq_min1 && frequency < freq_min2)
+          else if (frequency >= freq_min1 && frequency < freq_min2) 
           {
             strip.setPixelColor(TUNE_LED_RED, 0, 0, 0);
             strip.setPixelColor(TUNE_LED_YELLOW_HIGH, 0, 0, 0);
-            strip.setPixelColor(TUNE_LED_YELLOW_LOW, 200, 200, 200);
-          }
-          else if (frequency > freq_max2 && frequency <= freq_max1)
+            strip.setPixelColor(TUNE_LED_YELLOW_LOW, 200, 200, 200);  
+          }      
+          else if (frequency > freq_max2 && frequency <= freq_max1) 
           {
             strip.setPixelColor(TUNE_LED_RED, 0, 0, 0);
             strip.setPixelColor(TUNE_LED_YELLOW_HIGH, 200, 200, 200);
-            strip.setPixelColor(TUNE_LED_YELLOW_LOW, 0, 0, 0);
-          }
+            strip.setPixelColor(TUNE_LED_YELLOW_LOW, 0, 0, 0);  
+          }          
           strip.show();
           return;
-        }
+        }        
       }
     }
   }
   strip.setPixelColor(TUNE_LED_RED, 0, 0, 0);
   strip.setPixelColor(TUNE_LED_YELLOW_HIGH, 200, 200, 200);
-  strip.setPixelColor(TUNE_LED_YELLOW_LOW, 0, 0, 0);
+  strip.setPixelColor(TUNE_LED_YELLOW_LOW, 0, 0, 0);   
   strip.show();
 }
 
@@ -317,15 +317,13 @@ void findFrequency(int current_string)
 //Simple "Candy Cane" effect, where the LED's walk the green and blue strings
 void current_code_H(void)
 {
-  all_leds_off();
-  
-  for (int i = 0; i <= 7; i++) {
-    strip.setPixelColor(green[i], 200, 200, 200);
-    strip.setPixelColor(blue[i], 200, 200, 200);
-    strip.show();
-    delay(100);
-    //Serial.println(currentLine);
-  }
+  for (int i = 0; i <=7; i++) {
+      strip.setPixelColor(green[i], 200, 200, 200);
+      strip.setPixelColor(blue[i], 200, 200, 200);
+      strip.show();
+      delay(100);
+      //Serial.println(currentLine);
+    }
   for (int i = 7; i >= 0; i--) {
     strip.setPixelColor(green[i], 0, 0, 0);
     strip.setPixelColor(blue[i], 0, 0, 0);
@@ -338,12 +336,12 @@ void current_code_H(void)
 void current_code_I(void)
 {
   for (int i = 2; i <= 26; i++) {
-    strip.setPixelColor(i, 200, 200, 200);
-    strip.show();
-    delay(100);
-    //Serial.println(currentLine);
-  }
-  for (int i = 28; i >= 2; i--) {
+      strip.setPixelColor(i, 200, 200, 200);
+      strip.show();
+      delay(100);
+      //Serial.println(currentLine);
+    }
+  for (int i = 26; i >= 2; i--) {
     strip.setPixelColor(i, 0, 0, 0);
     strip.show();
     delay(100);
@@ -353,31 +351,31 @@ void current_code_I(void)
 //This effect feels more like a pinball attract mode, not any real logicall grouping of lights, just randomly lighting 3 up for random amounts of time.
 void current_code_J(void)
 {
-  randNumber1 = random(2, 26);
-  randNumber2 = random(2, 26);
-  randNumber3 = random(2, 26);
-  randDelay1 = random(50, 150);
-  randDelay2 = random(50, 150);
-  randDelay3 = random(50, 150);
-  strip.setPixelColor(randNumber1, 200, 200, 200);
-  strip.show();
-  delay(randDelay1);
-  strip.setPixelColor(randNumber2, 200, 200, 200);
-  strip.show();
-  delay(randDelay2);
-  strip.setPixelColor(randNumber3, 200, 200, 200);
-  strip.show();
-  delay(randDelay3);
-  strip.setPixelColor(randNumber1, 0, 0, 0);
-  strip.show();
-  delay(randDelay1);
-  strip.setPixelColor(randNumber2, 0, 0, 0);
-  strip.show();
-  delay(randDelay2);
-  strip.setPixelColor(randNumber3, 0, 0, 0);
-  strip.show();
-  delay(randDelay3);
-
+    randNumber1 = random(2, 26);
+    randNumber2 = random(2, 26);
+    randNumber3 = random(2, 26);
+    randDelay1 = random(50, 150);
+    randDelay2 = random(50, 150);
+    randDelay3 = random(50, 150);
+    strip.setPixelColor(randNumber1, 200, 200, 200);
+    strip.show();
+    delay(randDelay1);
+    strip.setPixelColor(randNumber2, 200, 200, 200);
+    strip.show();
+    delay(randDelay2);
+    strip.setPixelColor(randNumber3, 200, 200, 200);
+    strip.show();
+    delay(randDelay3);
+    strip.setPixelColor(randNumber1, 0, 0, 0);
+    strip.show();
+    delay(randDelay1);
+    strip.setPixelColor(randNumber2, 0, 0, 0);
+    strip.show();
+    delay(randDelay2);
+    strip.setPixelColor(randNumber3, 0, 0, 0);
+    strip.show();
+    delay(randDelay3);
+    
 }
 
 // The real reason to light this thing up in the first place, read the microphone, I went through a couple of different ones by the MAX4466 is the one I've landed on, the microphone is epoxied into the flipper hole. I basically have no idea how or why this works, the comments are not mine, thank Adafruit for this one.
@@ -395,39 +393,39 @@ void current_code_L(void)
   // Calculate bar height based on dynamic min/max levels (fixed point):
   height = TOP * (lvl - minLvlAvg) / (long)(maxLvlAvg - minLvlAvg);
 
-  if (height < 0L)       height = 0;     // Clip output
-  else if (height > TOP) height = TOP;
-  if (height > peak)     peak   = height; // Keep 'peak' dot at top
+  if(height < 0L)       height = 0;      // Clip output
+  else if(height > TOP) height = TOP;
+  if(height > peak)     peak   = height; // Keep 'peak' dot at top
 
 
   // Color pixels based on rainbow gradient
-  for (i = 2; i < N_PIXELS; i++) {
-    if (i >= height)               strip.setPixelColor(i,   0,   0, 0);
-    else strip.setPixelColor(i, Wheel(map(i, 0, strip.numPixels() - 1, 30, 150)));
+  for(i=2; i<N_PIXELS; i++) {
+    if(i >= height)               strip.setPixelColor(i,   0,   0, 0);
+    else strip.setPixelColor(i,Wheel(map(i,0,strip.numPixels()-1,30,150)));
 
   }
 
-  // Draw peak dot
-  if (peak > 0 && peak <= N_PIXELS - 1) strip.setPixelColor(peak, Wheel(map(peak, 0, strip.numPixels() - 1, 30, 150)));
+  // Draw peak dot 
+  if(peak > 0 && peak <= N_PIXELS-1) strip.setPixelColor(peak,Wheel(map(peak,0,strip.numPixels()-1,30,150)));
 
-  strip.show(); // Update strip
+   strip.show(); // Update strip
 
-  // Every few frames, make the peak pixel drop by 1:
+// Every few frames, make the peak pixel drop by 1:
 
-  if (++dotCount >= PEAK_FALL) { //fall rate
+    if(++dotCount >= PEAK_FALL) { //fall rate
 
-    if (peak > 0) peak--;
-    dotCount = 0;
-  }
+      if(peak > 0) peak--;
+      dotCount = 0;
+    }
 
   vol[volCount] = n;                      // Save sample for dynamic leveling
-  if (++volCount >= SAMPLES) volCount = 0; // Advance/rollover sample counter
+  if(++volCount >= SAMPLES) volCount = 0; // Advance/rollover sample counter
 
   // Get volume range of prior frames
   minLvl = maxLvl = vol[0];
-  for (i = 1; i < SAMPLES; i++) {
-    if (vol[i] < minLvl)      minLvl = vol[i];
-    else if (vol[i] > maxLvl) maxLvl = vol[i];
+  for(i=1; i<SAMPLES; i++) {
+    if(vol[i] < minLvl)      minLvl = vol[i];
+    else if(vol[i] > maxLvl) maxLvl = vol[i];
   }
   // minLvl and maxLvl indicate the volume range over prior frames, used
   // for vertically scaling the output graph (so it looks interesting
@@ -435,25 +433,58 @@ void current_code_L(void)
   // (e.g. at very low volume levels) the graph becomes super coarse
   // and 'jumpy'...so keep some minimum distance between them (this
   // also lets the graph go to zero when no sound is playing):
-  if ((maxLvl - minLvl) < TOP) maxLvl = minLvl + TOP;
+  if((maxLvl - minLvl) < TOP) maxLvl = minLvl + TOP;
   minLvlAvg = (minLvlAvg * 63 + minLvl) >> 6; // Dampen min/max levels
   maxLvlAvg = (maxLvlAvg * 63 + maxLvl) >> 6; // (fake rolling average)
 
 }
 
+//All lights fade in and out.
+void current_code_M(void)
+{
+  brighten();
+  darken();
+  delay(250);
+}
+
+void brighten() {
+  uint16_t i, j;
+
+  for (j = 0; j < 125; j++) {
+    for (i = 2; i < strip.numPixels(); i++) {
+      strip.setPixelColor(i, j, j, j);
+    }
+    strip.show();
+    delay(15);
+  }
+}
+
+// 255 to 0
+void darken() {
+  uint16_t i, j;
+
+  for (j = 125; j > 0; j--) {
+    for (i = 2; i < strip.numPixels(); i++) {
+      strip.setPixelColor(i, j, j, j);
+    }
+    strip.show();
+    delay(10);
+    }
+}
+
 // Input a value 0 to 255 to get a color value.
 // The colors are a transition r - g - b - back to r.
 uint32_t Wheel(byte WheelPos) {
-  if (WheelPos < 85) {
-    return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
-  } else if (WheelPos < 170) {
-    WheelPos -= 85;
-    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  if(WheelPos < 85) {
+   return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+  } else if(WheelPos < 170) {
+   WheelPos -= 85;
+   return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
   } else {
-    WheelPos -= 170;
-    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-  }
-}
+   WheelPos -= 170;
+   return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  } 
+ }
 
 void printWifiStatus() {
   // print the SSID of the network you're attached to:
@@ -480,19 +511,19 @@ void printWifiStatus() {
 #define CPU_HZ 48000000
 #define TIMER_PRESCALER_DIV 1024
 
-void timer_doSetFrequency(int tcNum, int frequencyHz)
+void timer_doSetFrequency(int tcNum, int frequencyHz) 
 {
   TcCount16* TC;
   if (tcNum == 3)
   {
     TC = (TcCount16*) TC3;
   }
-  else if (tcNum == 4)
+  else if (tcNum == 4)    
   {
-    TC = (TcCount16*) TC4;
-  }
-
-  int compareValue = (CPU_HZ / (TIMER_PRESCALER_DIV * frequencyHz)) - 1;
+    TC = (TcCount16*) TC4;    
+  }   
+  
+  int compareValue = (CPU_HZ / (TIMER_PRESCALER_DIV * frequencyHz)) - 1;  
   // Make sure the count is in a proportional position to where it was
   // to prevent any jitter or disconnect when changing the compare value.
   TC->COUNT.reg = map(TC->COUNT.reg, 0, TC->CC[0].reg, 0, compareValue);
@@ -500,39 +531,39 @@ void timer_doSetFrequency(int tcNum, int frequencyHz)
   while (TC->STATUS.bit.SYNCBUSY == 1);
 }
 
-void timer_doStart(int tcNum)
+void timer_doStart(int tcNum) 
 {
   TcCount16* TC;
   if (tcNum == 3)
   {
     TC = (TcCount16*) TC3;
   }
-  else if (tcNum == 4)
+  else if (tcNum == 4)    
   {
-    TC = (TcCount16*) TC4;
-  }
-
+    TC = (TcCount16*) TC4;    
+  } 
+  
   TC->CTRLA.reg |= TC_CTRLA_ENABLE;
   while (TC->STATUS.bit.SYNCBUSY == 1);
 }
 
-void timer_doStop(int tcNum)
+void timer_doStop(int tcNum) 
 {
   TcCount16* TC;
   if (tcNum == 3)
   {
     TC = (TcCount16*) TC3;
   }
-  else if (tcNum == 4)
+  else if (tcNum == 4)    
   {
-    TC = (TcCount16*) TC4;
-  }
-
+    TC = (TcCount16*) TC4;    
+  }   
+  
   TC->CTRLA.reg &= ~TC_CTRLA_ENABLE;
   while (TC->STATUS.bit.SYNCBUSY == 1);
 }
 
-void timer_doPrepare(int tcNum, int frequencyHz)
+void timer_doPrepare(int tcNum, int frequencyHz) 
 {
   TcCount16* TC;
   if (tcNum == 3)
@@ -540,14 +571,14 @@ void timer_doPrepare(int tcNum, int frequencyHz)
     TC = (TcCount16*) TC3;
     REG_GCLK_CLKCTRL = (uint16_t) (GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_ID (GCM_TCC2_TC3)) ;
   }
-  else if (tcNum == 4)
+  else if (tcNum == 4)    
   {
     TC = (TcCount16*) TC4;
     REG_GCLK_CLKCTRL = (uint16_t) (GCLK_CLKCTRL_CLKEN | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_ID (GCM_TC4_TC5)) ;
   }
-
+  
   while ( GCLK->STATUS.bit.SYNCBUSY == 1 );
-
+  
   TC->CTRLA.reg &= ~TC_CTRLA_ENABLE;
 
   // Use the 16-bit timer
@@ -570,32 +601,32 @@ void timer_doPrepare(int tcNum, int frequencyHz)
 
   if (tcNum == 3)
     NVIC_EnableIRQ(TC3_IRQn);
-  else if (tcNum == 4)
-    NVIC_EnableIRQ(TC4_IRQn);
+ else if (tcNum == 4)
+    NVIC_EnableIRQ(TC4_IRQn);   
 }
 
-void TC3_Handler()
+void TC3_Handler() 
 {
   TcCount16* TC = (TcCount16*) TC3;
   // If this interrupt is due to the compare register matching the timer count
   // we chec button
-  if (TC->INTFLAG.bit.MC0 == 1)
+  if (TC->INTFLAG.bit.MC0 == 1) 
   {
     TC->INTFLAG.bit.MC0 = 1;
-
+    
     check_button();
   }
 }
 
-void TC4_Handler()
+void TC4_Handler() 
 {
   TcCount16* TC = (TcCount16*) TC4;
   // If this interrupt is due to the compare register matching the timer count
   // we chec button
-  if (TC->INTFLAG.bit.MC0 == 1)
+  if (TC->INTFLAG.bit.MC0 == 1) 
   {
     TC->INTFLAG.bit.MC0 = 1;
-
+    
     if (sampleCnt < bufferSize)
     {
       rawData[sampleCnt] = adcReadFast1();//adcReadFast();//analogRead(MIC_PIN); ;
@@ -606,17 +637,16 @@ void TC4_Handler()
 
 void setup() {
   Serial.begin(9600);      // initialize serial communication
-  pinMode(LED_BUILTIN, OUTPUT);     // set the board LED pin mode
+  pinMode(LED_BUILTIN, OUTPUT);     // set the board LED pin mode  
   pinMode(BTN_PIN, INPUT_PULLUP); // set the BTN pin mode
   memset(vol, 0, sizeof(vol)); // this is used by the microphone code I don't understand
-
-  strip.begin(); //NEO Pixel intializing stuff
-  strip.setBrightness(255); //NEO Pixel intializing stuff
-  strip.show(); // Initialize all pixels to 'off';
-  strip.setPixelColor(0,255,255,255);
-  strip.setPixelColor(1,255,255,255);
-  strip.show();
   
+  strip.begin(); //NEO Pixel intializing stuff
+  strip.setBrightness(150); //NEO Pixel intializing stuff
+  strip.setPixelColor(0, 100, 100, 100);
+  strip.setPixelColor(1, 100, 100, 100);
+  strip.show(); // Initialize all pixels to 'off';
+
   // After powering BTN pressed -> wifi will be ignored
   if (digitalRead(BTN_PIN) == 0)
   {
@@ -625,13 +655,13 @@ void setup() {
   else
   {
     // check for the WiFi module:
-    if (WiFi.status() == WL_NO_MODULE)
+    if (WiFi.status() == WL_NO_MODULE) 
     {
       Serial.println("Communication with WiFi module failed!");
       // don't continue
       //while (true);
-
-      // continue w/o wifi
+      
+      // continue w/o wifi    
       wifi_enabled = 0;
     }
   }
@@ -644,55 +674,55 @@ void setup() {
     }
     // attempt to connect to Wifi network:
     for (char i = 0; i < COUNT_ATTEMPTS_CONNECT_WIFI; i++)
-    {
+    {   
       Serial.print("Attempting to connect to Network named: ");
       Serial.println(ssid);                   // print the network name (SSID);
 
       // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
       status = WiFi.begin(ssid, pass);
-
+      
       // Connect success -> exit
-      if (status == WL_CONNECTED)
+      if (status == WL_CONNECTED) 
       {
         server.begin();                           // start the web server on port 80
         printWifiStatus();                        // you're connected now, so print out the status
-
+        
         break;
       }
       else
-      {
+      {      
         // It was last attempt and connect status is bad
         if (i == (COUNT_ATTEMPTS_CONNECT_WIFI - 1))
         {
           wifi_enabled = 0;
-        }
+        }     
         else
         {
           // wait 5 seconds for next attempt
-          delay(5000);
+          delay(5000);            
         }
       }
-    }
+    }   
   }
-
-  //
+  
+  // 
   adcSetupFast1();
-
-  // tuner setup
+  
+  // tuner setup 
   setup_tuner();
 
-  // first block
+  // first block 
   current_code_H();
-
+  
   // use hardware timer for button , loop() is so busy by strip and WIFI
-  timer_doPrepare(3, 10); // 10 Hz = 100 ms tick
+  timer_doPrepare(3, 10); // 10 Hz = 100 ms tick  
   timer_doStart(3);
 }
 
-void loop() {
+void loop() {    
   // work with wifi
   if (wifi_enabled == 1)
-  {
+  { 
     WiFiClient client = server.available();   // listen for incoming clients
 
     if (client) {                             // if you get a client,
@@ -718,6 +748,7 @@ void loop() {
               client.print("Click <a href=\"/I\">here</a> turn the Fathomcaster on Snake<br>");
               client.print("Click <a href=\"/J\">here</a> turn the Fathomcaster on Random<br>");
               client.print("Click <a href=\"/L\">here</a> turn the Fathomcaster on Microphone<br>");
+              client.print("Click <a href=\"/M\">here</a> turn the Fathomcaster on Fade in Fade Out<br>");
               // for tuner
               client.print("Click <a href=\"/S1\">here</a> turn the Fathomcaster string 1<br>");
               client.print("Click <a href=\"/S2\">here</a> turn the Fathomcaster string 2<br>");
@@ -740,26 +771,28 @@ void loop() {
           // Check to see what the client request was eg. "GET /H" or "GET /L" etc:
 
           if (currentLine.endsWith("GET /H"))
-            current_code = 1;
-          else if (currentLine.endsWith("GET /I"))
-            current_code = 2;
-          else if (currentLine.endsWith("GET /J"))
-            current_code = 3;
-          else if (currentLine.endsWith("GET /L"))
-            current_code = 4;
-          else if (currentLine.endsWith("GET /S1"))
-            current_code = 5;
-          else if (currentLine.endsWith("GET /S2"))
-            current_code = 6;
-          else if (currentLine.endsWith("GET /S3"))
-            current_code = 7;
-          else if (currentLine.endsWith("GET /S4"))
-            current_code = 8;
-          else if (currentLine.endsWith("GET /S5"))
-            current_code = 9;
-          else if (currentLine.endsWith("GET /S6"))
-            current_code = 10;
-
+            current_code = 1;         
+          else if (currentLine.endsWith("GET /I")) 
+            current_code = 2;         
+          else if (currentLine.endsWith("GET /J")) 
+            current_code = 3;   
+          else if (currentLine.endsWith("GET /L")) 
+            current_code = 4; 
+          else if (currentLine.endsWith("GET /M")) 
+            current_code = 11; 
+          else if (currentLine.endsWith("GET /S1")) 
+            current_code = 5;           
+          else if (currentLine.endsWith("GET /S2")) 
+            current_code = 6;           
+          else if (currentLine.endsWith("GET /S3")) 
+            current_code = 7;           
+          else if (currentLine.endsWith("GET /S4")) 
+            current_code = 8;           
+          else if (currentLine.endsWith("GET /S5")) 
+            current_code = 9;           
+          else if (currentLine.endsWith("GET /S6")) 
+            current_code = 10;          
+            
         }
       }
       // close the connection:
@@ -767,9 +800,9 @@ void loop() {
       Serial.println("client disonnected");
     }
   }
-
+  
   if (current_code != previous_code)
-    all_leds_off();
+    all_leds_off(); 
 
   if (current_code == 1)
   {
@@ -786,13 +819,16 @@ void loop() {
   else if (current_code == 4)
   {
     current_code_L();
-  }
+  } 
   else if (current_code >= 5 && current_code <= 10)
   {
     // call function with arg 0..5
-    //check_tuner(current_code - 5);
+    //check_tuner(current_code - 5); 
     findFrequency(current_code - 5);
+  } 
+  else if (current_code == 11)
+  {
+    current_code_M();
   }
-
   previous_code = current_code;
 }
